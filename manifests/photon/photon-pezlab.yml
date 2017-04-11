@@ -1,0 +1,31 @@
+---
+deployment:
+  resume_system: true
+  image_datastores: FS_PEZ_NFS_HAAS04
+  use_image_datastore_for_vms: true
+  syslog_endpoint: 10.65.162.15
+  auth_enabled: false
+  stats_enabled: false
+  loadbalancer_enabled: true
+hosts:
+- address_ranges: 10.65.162.104
+  username: root
+  password: d3v0ps!
+  usage_tags:
+  - MGMT
+  - CLOUD
+  metadata:
+    ALLOWED_DATASTORES: FS_PEZ_NFS_HAAS04
+    MANAGEMENT_DATASTORE: FS_PEZ_NFS_HAAS04
+    MANAGEMENT_NETWORK_DNS_SERVER : 10.65.162.2
+    MANAGEMENT_NETWORK_GATEWAY: 10.65.170.1
+    MANAGEMENT_VM_IPS: 10.65.170.7-10.65.170.8
+    MANAGEMENT_NETWORK_NETMASK: 255.255.255.0
+    MANAGEMENT_PORTGROUP: Photon_PCF
+- address_ranges: "10.65.162.106,10.65.162.107,10.65.162.110"
+  username: root
+  password: d3v0ps!
+  usage_tags:
+  - CLOUD
+  metadata:
+    ALLOWED_DATASTORES: FS_PEZ_NFS_HAAS04

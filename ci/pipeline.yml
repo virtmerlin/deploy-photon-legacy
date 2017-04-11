@@ -1,0 +1,265 @@
+resources:
+- name: 24h
+  type: time
+  source: {interval: 24h}
+
+- name: deploy-photon
+  type: git
+  source:
+    uri: git@github.com:virtmerlin/deploy-photon.git
+    branch: develop
+    private_key: {{githubsshkey}}
+
+- name: bosh-photon-cpi-release
+  type: git
+  source:
+    uri: git@github.com:vmware/bosh-photon-cpi-release.git
+    branch: develop
+    private_key: {{githubsshkey}}
+
+- name: photon-run-id
+  type: semver
+  source:
+    bucket: concourse-photon
+    key: {{semver_file_name}}
+    initial_version: 1.0.0
+    access_key_id: {{aws_id}}
+    secret_access_key: {{aws_key}}
+
+jobs:
+- name: WipeEnv-Only
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - aggregate:
+    - get: deploy-photon
+      trigger: false
+  - task: wipe-env
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/wipe-env.sh
+      params:
+        esx_user: {{esx_user}}
+        esx_passwd: {{esx_passwd}}
+        esx_hosts: {{esx_hosts}}
+        arg_wipe: {{arg_wipe}}
+        photon_manifest: {{photon_manifest}}
+
+- name: p0-WipeEnv-Full
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - aggregate:
+    - get: 24h
+      trigger: true
+    - get: deploy-photon
+      trigger: false
+    - get: photon-run-id
+      params: {bump: major}
+  - task: wipe-env
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/wipe-env.sh
+      params:
+        esx_user: {{esx_user}}
+        esx_passwd: {{esx_passwd}}
+        esx_hosts: {{esx_hosts}}
+        arg_wipe: {{arg_wipe}}
+        photon_manifest: {{photon_manifest}}
+
+  - put: photon-run-id
+    params: {file: photon-run-id/number}
+
+- name: p1-task1-Deploy-Photon-Installer
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p0-WipeEnv-Full]
+  - get: deploy-photon
+    trigger: false
+  - task: p1-1-deploy-photon-ova
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/deploy-photon-ova.sh
+      params:
+        esx_user: {{esx_user}}
+        esx_passwd: {{esx_passwd}}
+        esx_hosts: {{esx_hosts}}
+        ova_url: {{ova_url}}
+        ova_network: {{ova_network}}
+        ova_datastore: {{ova_datastore}}
+        ova_ip: {{ova_ip}}
+        ova_netmask: {{ova_netmask}}
+        ova_gateway: {{ova_gateway}}
+        ova_dns: {{ova_dns}}
+        ova_ntp: {{ova_ntp}}
+        ova_syslog: {{ova_syslog}}
+        ova_passwd: {{ova_passwd}}
+        ova_esx_user: {{ova_esx_user}}
+        ova_esx_passwd: {{ova_esx_passwd}}
+        ova_esx_host: {{ova_esx_host}}
+
+- name: p1-task2-Deploy-Photon
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p1-task1-Deploy-Photon-Installer]
+  - get: deploy-photon
+    trigger: false
+  - task: p1-2-deploy-photon
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/deploy-photon.sh
+      params:
+        ova_ip: {{ova_ip}}
+        photon_manifest: {{photon_manifest}}
+        photon_tenant: {{photon_tenant}}
+        photon_project: {{photon_project}}
+        photon_user: {{photon_user}}
+        photon_passwd: {{photon_passwd}}
+        cli_url: {{cli_url}}
+
+- name: p2-task1-Deploy-BOSH
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p1-task2-Deploy-Photon]
+  - get: deploy-photon
+    trigger: false
+  - get: bosh-photon-cpi-release
+    trigger: false
+  - task: p2-1-deploy-bosh
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+        - name: bosh-photon-cpi-release
+      run:
+        path: deploy-photon/ci/tasks/deploy-bosh.sh
+      params:
+        ova_ip: {{ova_ip}}
+        photon_release: {{photon_release}}
+        bosh_manifest: {{bosh_manifest}}
+        bosh_deployment_network_name: {{bosh_deployment_network_name}}
+        bosh_deployment_network: {{bosh_deployment_network}}
+        bosh_deployment_network_subnet: {{bosh_deployment_network_subnet}}
+        bosh_deployment_network_gw: {{bosh_deployment_network_gw}}
+        bosh_deployment_network_dns: {{bosh_deployment_network_dns}}
+        bosh_deployment_network_ip: {{bosh_deployment_network_ip}}
+        bosh_deployment_user: {{bosh_deployment_user}}
+        bosh_deployment_passwd: {{bosh_deployment_passwd}}
+        photon_user: {{photon_user}}
+        photon_passwd: {{photon_passwd}}
+        photon_ignore_cert: {{photon_ignore_cert}}
+        photon_tenant: {{photon_tenant}}
+        photon_project: {{photon_project}}
+        cli_url: {{cli_url}}
+
+- name: p2-task2-Upload-PCF
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p2-task1-Deploy-BOSH]
+  - get: deploy-photon
+    trigger: false
+  - task: p2-2-upload-ERT
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/upload-pcf.sh
+        args: [elastic-runtime,{{pcf_ert_version}}]
+      params:
+        ova_ip: {{ova_ip}}
+        bosh_cpi: {{bosh_cpi}}
+        bosh_manifest: {{bosh_manifest}}
+        bosh_deployment_network_ip: {{bosh_deployment_network_ip}}
+        bosh_deployment_user: {{bosh_deployment_user}}
+        bosh_deployment_passwd: {{bosh_deployment_passwd}}
+        pcf_ert_version: {{pcf_ert_version}}
+        pcf_pivnet_token: {{pcf_pivnet_token}}
+
+- name: p2-task3-Deploy-PCF
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p2-task2-Upload-PCF]
+  - get: deploy-photon
+    trigger: false
+  - task: p2-3-deploy-ERT
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/deploy-pcf.sh
+      params:
+        ova_ip: {{ova_ip}}
+        photon_user: {{photon_user}}
+        photon_passwd: {{photon_passwd}}
+        bosh_deployment_network: {{bosh_deployment_network}}
+        bosh_deployment_network_ip: {{bosh_deployment_network_ip}}
+        bosh_deployment_user: {{bosh_deployment_user}}
+        bosh_deployment_passwd: {{bosh_deployment_passwd}}
+        pcf_manifest: {{pcf_manifest}}
+        cli_url: {{cli_url}}
+
+- name: p2-task4-test-ERT
+  serial: true
+  max_in_flight: 1
+  serial_groups: [full]
+  plan:
+  - get: photon-run-id
+    trigger: true
+    passed: [p2-task3-Deploy-PCF]
+  - get: deploy-photon
+    trigger: false
+  - task: run-errands
+    config:
+      platform: linux
+      image: docker:///virtmerlin/deploy-worker
+      inputs:
+        - name: deploy-photon
+      run:
+        path: deploy-photon/ci/tasks/run-errands.sh
+      params:
+        bosh_deployment_network_ip: {{bosh_deployment_network_ip}}
+        bosh_deployment_user: {{bosh_deployment_user}}
+        bosh_deployment_passwd: {{bosh_deployment_passwd}}

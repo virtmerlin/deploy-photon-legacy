@@ -1,0 +1,30 @@
+---
+deployment:
+  resume_system: true
+  image_datastores: wdc-ucs-ch5-3
+  use_image_datastore_for_vms: false
+  auth_enabled: false
+  stats_enabled: false
+  loadbalancer_enabled: true
+hosts:
+- address_ranges: "10.146.36.51,10.146.36.52"
+  username: root
+  password: ca$hc0w
+  usage_tags:
+  - MGMT
+  - CLOUD
+  metadata:
+    ALLOWED_DATASTORES: wdc-ucs-ch5-2
+    MANAGEMENT_DATASTORE: wdc-ucs-ch5-2
+    MANAGEMENT_NETWORK_DNS_SERVER : 10.142.7.1
+    MANAGEMENT_NETWORK_GATEWAY: 10.146.63.253
+    MANAGEMENT_VM_IPS: 10.146.63.120-10.146.63.121
+    MANAGEMENT_NETWORK_NETMASK: 255.255.248.0
+    MANAGEMENT_PORTGROUP: "VM VLAN"
+- address_ranges: 10.146.36.53
+  username: root
+  password: ca$hc0w
+  usage_tags:
+  - CLOUD
+  metadata:
+    ALLOWED_DATASTORES: wdc-ucs-ch5-2
